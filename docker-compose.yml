@@ -1,0 +1,63 @@
+version: '3'
+
+services:
+  database:
+    image: postgres:latest
+    container_name: db
+    env_file: .env.db
+    volumes:
+      - pg_data:/var/lib/posgresql/data
+    ports:
+      - '127.0.0.1:5432:5432'
+    restart: unless-stopped
+
+  djnago_server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python manage.py runserver 0.0.0.0:8081
+    env_file: .env.app
+    tty: true
+    stdin_open: true
+    volumes:
+      - ./:/app/
+    ports:
+      - '127.0.0.1:8082:8081'
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - '127.0.0.1:6379:6379'
+    restart: unless-stopped
+
+  celery:
+    container_name: celery
+    build:
+      context: .
+      dockerfile: Dockerfile.tasks
+    env_file: .env.app
+    depends_on:
+      - djnago_server
+      - database
+      - redis
+    restart: unless-stopped
+
+  tasks_beat:
+    container_name: tasks_beat
+    build:
+      context: .
+      dockerfile: Dockerfile.tasks
+    command: celery -A university beat -l info -s "/tmp/celerybeat-schedule"
+    env_file: .env.app
+    depends_on:
+      - djnago_server
+      - database
+      - redis
+    restart: unless-stopped
+
+
+
+volumes:
+  pg_data:
+    driver: local
